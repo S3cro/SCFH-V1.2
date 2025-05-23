@@ -6,6 +6,19 @@ import time
 root = ctk.CTk()  # creates a ctk root of the whole app
 
 
+def save_config(config):
+    """
+    Saves the config dictionary to config.txt.
+    :param config: Dictionary containing config data.
+    """
+    with open("config.txt", "w", encoding="utf-8") as f:
+        for section, items in config.items():
+            f.write(f"[{section}]\n")
+            for key, value in items.items():
+                f.write(f"{key}={value}\n")
+            f.write("\n")
+
+
 class Tabs(ctk.CTkTabview):
     """
     Handles Tabs in my app.
@@ -19,12 +32,14 @@ class Tabs(ctk.CTkTabview):
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
         self.master = master
-        self.main_folder = load_default_path()
+        self.config = load_config() # Load config once
+        self.main_folder = self.config["Paths"].get("main_directory")
         self.project_name = None
         self.modes_list:list = []
         self.inside_cat_path:str = ""
         self.inner_switch = None
         self.category_instance = None
+        self.label_widgets = {} # Dictionary to store label widgets
 
         self.tab_widget = ctk.CTkTabview(master)  # create tabs widget
         self.tab_widget.pack(fill="both", expand=True)
@@ -56,16 +71,17 @@ class Tabs(ctk.CTkTabview):
         labels,buttons,more frames,segmented buttons, IDK what to write in documentation here.
         :param tab: main tab
         """
+
         project_creation_frame = ctk.CTkFrame(tab)  # create a frame for project creation (name, checkboxes, category)
         project_creation_frame.pack(fill="both", expand=True)
 
-        project_name_label = ctk.CTkLabel(project_creation_frame, text="Enter Project Name: ",
+        project_name_label = ctk.CTkLabel(project_creation_frame, text=self.config["Labels"]["project_name_label"],
                                           font=("Arial", 22, "bold"))  # project name label
         project_name_label.pack(pady=15) # creates label
 
         self.project_name = get_project_name(project_creation_frame) # Project name entry
 
-        self.category_instance = CategoriesLogic(frame=project_creation_frame)
+        self.category_instance = CategoriesLogic(frame=project_creation_frame, config=self.config)
 
         # upon Pressing on the Confirm button, you will be sent to the modes tab.
         move_to_modes_tab_button = ctk.CTkButton(project_creation_frame,
@@ -73,6 +89,67 @@ class Tabs(ctk.CTkTabview):
                                                  command= lambda: (self.tab_widget.set("Modes"), no_category_popup(self.tab_widget) if self.category_instance.cat_path == "" else None),
                                                  font=("Arial", 22, "bold"))
         move_to_modes_tab_button.pack(pady=15, side="bottom")
+
+    def open_config_editor(self):
+        """
+        Opens a window to edit labels in config.txt and updates the app dynamically.
+        """
+        editor_window = ctk.CTkToplevel()
+        editor_window.title("Edit Labels")
+        editor_window.geometry("600x400")
+
+        editor_window.transient(root)
+        editor_window.grab_set()
+        editor_window.focus_force()
+
+        scroll_frame = ctk.CTkScrollableFrame(editor_window, label_text="Edit Labels", label_font=("Arial", 16, "bold"))
+        scroll_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        entries = {}
+        for label_key in self.config["Labels"]:
+            frame = ctk.CTkFrame(scroll_frame)
+            frame.pack(fill="x", pady=5)
+            ctk.CTkLabel(frame, text=label_key, font=("Arial", 14), width=200).pack(side="left", padx=5)
+            entry = ctk.CTkEntry(frame, width=300, font=("Arial", 14))
+            entry.insert(0, self.config["Labels"][label_key])
+            entry.pack(side="left", padx=5)
+            entries[label_key] = entry
+
+        def save_changes():
+            for key, entry_widget in entries.items():
+                self.config["Labels"][key] = entry_widget.get().strip() or self.config["Labels"][key]
+            save_config(self.config)
+            self.update_labels()
+            editor_window.destroy()
+
+        buttons_frame = ctk.CTkFrame(editor_window)
+        buttons_frame.pack(side="bottom", pady=10)
+        ctk.CTkButton(buttons_frame, text="Save", font=("Arial", 16, "bold"), command=save_changes).pack(side="left",
+                                                                                                         padx=10)
+        ctk.CTkButton(buttons_frame, text="Cancel", font=("Arial", 16, "bold"), command=editor_window.destroy).pack(
+            side="right", padx=10)
+
+    def update_labels(self):
+        """
+        Updates all labels in the app based on the current config.
+        Also refreshes category list and modes display if needed.
+        """
+        for key, widget in self.label_widgets.items():
+            if key == "directory_label":
+                widget.configure(text=self.config["Labels"][key].format(path=self.main_folder))
+            else:
+                widget.configure(text=self.config["Labels"][key])
+
+        self.category_instance.get_categories()
+        if self.category_instance.scrl_frame:
+            for widget in self.category_instance.scrl_frame.winfo_children():
+                widget.destroy()
+            self.category_instance.segmented_buttons()
+
+        if hasattr(self, 'modes_list') and self.modes_list:
+            display_entries_list = "\n".join(self.modes_list)
+            self.label_widgets["mode_display_label"].configure(
+                text=f"{self.config['Labels']['mode_display_label']}\n{display_entries_list}")
 
     def config_tab(self, tab_frame):
         """
@@ -85,20 +162,18 @@ class Tabs(ctk.CTkTabview):
         path_frame = ctk.CTkFrame(tab_frame)  # create a frame for path management
         path_frame.pack(side="top", fill="both", expand=True)
 
-        directory_label = ctk.CTkLabel(path_frame, text=f"Current Folder:\n {self.main_folder}\n Click to change Folder:",
+        directory_label = ctk.CTkLabel(path_frame, text=self.config["Labels"]["directory_label"].format(path=self.main_folder),
                                        font=("Arial", 16, "bold"))
         directory_label.pack(pady=20) # adds a label that tells us the current main directory
 
         warning_label = ctk.CTkLabel(path_frame,
-                                     text="Warning, \n Do NOT change Directory \n unless the Iron Swords Directory has been changed!",
-                                     font=("Arial", 20, "bold"), text_color="#ff4249")
+                                     text=self.config["Labels"]["warning_label"],
+                                     font=("Arial", 16, "bold"), text_color="#ff4249")
         warning_label.pack(pady=20)  # creates label that warns about changing main directory.
 
-        button_font = ("Arial", 16, "bold")  # sets a font for the button
-        choose_directory_button = ctk.CTkButton(path_frame, width=150, height=50, text="Change Directory",
-                                                font=button_font,
-                                                command=lambda: change_directory_popup(self.main_folder, directory_label))
-        choose_directory_button.pack(pady=10, side="bottom")  # creates a button to change directory
+        edit_labels_button = ctk.CTkButton(path_frame, width=150, height=50, text="Edit Labels",
+                                           font=("Arial", 20, "bold"), command= self.open_config_editor)
+        edit_labels_button.pack(pady=10)
 
         self.inner_switch = inner_folders_switch_state(path_frame)
 
@@ -107,7 +182,7 @@ class Tabs(ctk.CTkTabview):
 
         uses the custom class to add a button that
         adds entries and a modes tracker"""
-        mode_logic = AddModeLogic(tab)
+        mode_logic = AddModeLogic(tab, self.config)
         self.modes_list = mode_logic.get_list()
 
         confirm_button = ctk.CTkButton(tab, text="Create",
@@ -155,10 +230,12 @@ class Tabs(ctk.CTkTabview):
                 os.makedirs(mode_folder_path, exist_ok=True)
         show_project_creation_popup(project_path)
 
+
 class CategoriesLogic:
-    def __init__(self, frame):
+    def __init__(self, frame, config):
         self.frame = frame
-        self.main_folder:str = load_default_path()
+        self.config = config
+        self.main_folder:str = self.config["Paths"].get("main_directory")
         self.cat_list:list = []
         self.cat_dict:dict = {}
         self.cat_path:str = ""  # this is what I need in the end
@@ -213,12 +290,13 @@ class AddModeLogic:
     it creates a button that each time you press it, it adds an entry.
     also, it has an entry counter and a self updating label that indicated the number
     of entries. """
-    def __init__(self, frame):
+    def __init__(self, frame, config):
         """creates a counter
         creates a frame
         creates a button
         creates a label"""
         self.frame = frame
+        self.config = config
         self.entries_list = []  # # This holds the list of entries
         self.alert_label = None  # Initialize the alert label to make sure only 1 label will show at a time
 
@@ -228,15 +306,15 @@ class AddModeLogic:
         self.modes_frame.pack(side="top", fill="both", expand=True)
 
         # Add a Label
-        self.modes_tab_label = ctk.CTkLabel(self.modes_frame, text="Enter Constellations.", font=("Arial", 24, "bold"))
+        self.modes_tab_label = ctk.CTkLabel(self.modes_frame, text=self.config["Labels"]["modes_tab_label"], font=("Arial", 24, "bold"))
         self.modes_tab_label.pack(pady=10) # creates label
-        self.assign_instruction = ctk.CTkLabel(self.modes_frame, text="Press Enter to Append a Mode.", font=("Arial", 16, "bold"))
+        self.assign_instruction = ctk.CTkLabel(self.modes_frame, text=self.config["Labels"]["assign_instruction"], font=("Arial", 16, "bold"))
         self.assign_instruction.pack(pady=5) # creates label
 
         self.add_entry()
 
         # Label to show the entry count
-        self.mode_display_label = ctk.CTkLabel(self.modes_frame, text="Modes will be displayed here.", font=("Arial", 16, "bold"))
+        self.mode_display_label = ctk.CTkLabel(self.modes_frame, text=self.config["Labels"]["mode_display_label"], font=("Arial", 16, "bold"))
         self.mode_display_label.pack(pady=5, side="top")
 
     def add_entry(self):
@@ -257,7 +335,7 @@ class AddModeLogic:
             self.entries_list.append(entry_text) # Appends the Mode to a modes list
             display_entries_list = "\n".join(self.entries_list)
             self.mode_display_label.configure(
-            text=f"Current Modes:\n {display_entries_list}") # displays the number of modes and the modes list
+            text=f"{self.config['Labels']['mode_display_label']}\n{display_entries_list}") # displays the number of modes and the modes list
             event.widget.delete(0, ctk.END)  # Clears the entry
 
         else:
@@ -265,7 +343,7 @@ class AddModeLogic:
             if self.alert_label is None or not self.alert_label.winfo_exists():
                 # Create the alert label only if it doesn't already exist or is not visible
                 self.alert_label = ctk.CTkLabel(self.modes_frame, text_color="red", font=("Arial", 16),
-                                       text="Please enter a valid Name.")  # Creates an alert label in case the name is invalid
+                                       text=self.config["Labels"]["invalid_mode_alert"])  # Creates an alert label in case the name is invalid
             self.alert_label.pack()
             self.modes_frame.after(1000, self.alert_label.pack_forget)
 
@@ -281,21 +359,60 @@ def load_default_path():
     if there is no config file, the default path will be C:/Users/User/Desktop/Iron Swords War like in the StormCase laptop.
     to prevent saving an empty directory, it will save a directory only if one will be chosen.
     """
-    config_file = "config.txt"  # file to read main directory from
-    if os.path.exists(config_file):
-        with open(config_file, "r", encoding="utf-8") as f:  # Specify UTF-8 encoding when reading
-            saved_path = f.read().strip()
-            if saved_path:  # Return the saved path only if it's not empty
-                return saved_path
-    return "C:/Users/User/Desktop/Iron Swords War"  # Default path if no saved path is found
+    config = load_config()
+    return config["Paths"].get("main_directory")
+
+
+def load_config():
+    """
+    Reads config.txt and returns a dictionary with sections and key-value pairs.
+    Creates an empty config if the file is missing or raises an error on parsing issues.
+    """
+    config_file = "config.txt"
+    config = {"Paths": {}, "Labels": {}}
+
+    if not os.path.exists(config_file):
+        print(f"Config file '{config_file}' not found. Creating empty config.")
+        return config
+
+    try:
+        with open(config_file, "r", encoding="utf-8") as f:
+            current_section = None
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("[") and line.endswith("]"):
+                    current_section = line[1:-1]
+                    if current_section not in config:
+                        config[current_section] = {}
+                elif "=" in line and current_section:
+                    key, value = line.split("=", 1)
+                    # Decode escaped characters like \n
+                    value = bytes(value.strip(), "utf-8").decode("unicode_escape")
+                    config[current_section][key.strip()] = value
+    except UnicodeDecodeError:
+        raise Exception(f"Error: '{config_file}' has invalid encoding. Ensure it is UTF-8.")
+    except Exception as e:
+        raise Exception(f"Error reading '{config_file}': {e}")
+
+    if "Paths" not in config:
+        config["Paths"] = {}
+    if "Labels" not in config:
+        config["Labels"] = {}
+
+    return config
+
 
 def save_default_path(path):
     """
-    writes the chosen path in the config.txt file to remember the path for next time you open the application.
-    :param path:str
+    Updates the main directory path in config.txt.
+    :param path: str, the new directory path.
     """
-    with open("config.txt", "w", encoding="utf-8") as f:
-        f.write(path)
+    config = load_config()
+    config["Paths"]["main_directory"] = path
+    save_config(config)
+
 
 def app_initialization():
     """This is where it all begins..."""
@@ -311,19 +428,20 @@ def welcome_screen():
     Creates a main frame and introduction to the app
     creates 2 buttons to either create a new project or close the app.
     """
+    config = load_config()
     welcome_frame = ctk.CTkFrame(root)
     welcome_frame.pack(side="top", fill="both", expand=True)  # create welcome frame
 
-    welcome_label = ctk.CTkLabel(welcome_frame, text="RFeye Site Helper V1.2", font=("Arial", 24, "bold"))
+    welcome_label = ctk.CTkLabel(welcome_frame, text=config["Labels"]["welcome_label"], font=("Arial", 24, "bold"))
     welcome_label.pack(pady=15) # creates label
 
-    instruction_label = ctk.CTkLabel(welcome_frame, text="Welcome\n✡ Am Israel Chai ✡\n by Matan",
+    instruction_label = ctk.CTkLabel(welcome_frame, text=config["Labels"]["instruction_label"],
                                      font=("Arial", 18, "bold"))
     instruction_label.pack(pady=5)  # creates label
 
-    instruction_label = ctk.CTkLabel(welcome_frame, text="Choose to create a new project\n or close this window: ",
+    instruction_label2 = ctk.CTkLabel(welcome_frame, text=config["Labels"]["instruction_label2"],
                                      font=("Arial", 24, "bold"))
-    instruction_label.pack(pady=15) # creates label
+    instruction_label2.pack(pady=15) # creates label
 
     buttons_frame = ctk.CTkFrame(root)  # create buttons frame
     buttons_frame.pack(side="bottom", expand=True, pady=20, anchor="center")
@@ -379,22 +497,21 @@ def inner_folders_switch_state(frame):
     recs_and_pics_switch.pack(pady=20)
     return  recs_and_pics_switch
 
-def choose_directory(current_path, directory_label):
+def choose_directory(current_path, directory_label, tabs_instance):
     """
-    opens a file dialog to choose a directory to read folders from.
-    The code will get categories folders from this directory.
-    :param current_path: path from config.txt file
-    :param directory_label: updates the directory label to see what is the chosen directory.
+    Opens a file dialog to choose a directory to read folders from.
+    Updates the main directory in config.txt and Tabs instance.
+    :param current_path: Current path from config.txt
+    :param directory_label: Label to update with new path
+    :param tabs_instance: Tabs instance to update main_folder
     """
+    selected_directory = filedialog.askdirectory()
+    if selected_directory != current_path and selected_directory:
+        tabs_instance.main_folder = selected_directory
+        save_default_path(selected_directory)
+        directory_label.configure(text=tabs_instance.config["Labels"]["directory_label"].format(path=selected_directory))
 
-
-    selected_directory = filedialog.askdirectory()  # Open a dialog to choose a directory
-    if selected_directory != current_path and selected_directory:  # Ensure user selects a valid path
-        current_path = selected_directory
-        save_default_path(current_path)  # Save the new selected directory
-        directory_label.configure(text=f"Current Folder: {current_path}\n Click to change Folder:")
-
-def change_directory_popup(current_path, directory_label):
+def change_directory_popup(current_path, directory_label, tabs_instance):
     """Opens a Popup to confirm main directory change."""
     warning_popup = ctk.CTkToplevel()
     warning_popup.title("Are you sure?")
@@ -404,17 +521,14 @@ def change_directory_popup(current_path, directory_label):
 
     change_button = ctk.CTkButton(warning_popup, text="Change Anyways",
                                   text_color="red", font=("Arial", 16, "bold"),
-                                  command= lambda: choose_directory(current_path, directory_label))
+                                  command=lambda: choose_directory(current_path, directory_label, tabs_instance))
     change_button.pack(pady=10, side="left")
 
     cancel_button = ctk.CTkButton(warning_popup, text="Cancel", font=("Arial", 16, "bold"),
                                   command=lambda: warning_popup.destroy())
     cancel_button.pack(pady=10, side="right")
-    # Make the popup modal
     warning_popup.transient(root)
     warning_popup.grab_set()
-
-    # Set focus to the popup window
     warning_popup.focus_force()
 
 def show_project_creation_popup(new_project_path):
@@ -424,7 +538,7 @@ def show_project_creation_popup(new_project_path):
     popup = ctk.CTkToplevel()
     popup.geometry("300x150")
     popup.title("Success!")
-    label = ctk.CTkLabel(popup, text="Folder has been Created! \n Good Luck!", font=("Arial", 16, "bold"))
+    label = ctk.CTkLabel(popup, text=load_config()["Labels"]["success_popup_label"], font=("Arial", 16, "bold"))
     label.pack(pady=20)
 
     close_button = ctk.CTkButton(popup, text="Open Folder",font=("Arial", 16, "bold"), command=lambda: os.startfile(new_project_path))
@@ -441,7 +555,7 @@ def no_category_popup(tab):
     popup = ctk.CTkToplevel()
     popup.title("Are you Sure?")
     label = ctk.CTkLabel(popup,
-                         text="No Category has been chosen.\n Choose a Category or \n Save in Uncategorized for now?",
+                         text=load_config()["Labels"]["no_category_popup_label"],
                          font=("Arial", 16, "bold"))
     label.pack(pady=10)
 
@@ -456,6 +570,3 @@ def no_category_popup(tab):
     popup.transient(root)
     # Set focus to the popup window
     popup.focus_force()
-
-# TODO: Create PopUps class?
-# TODO: add option to disable uncategorized project popup?
