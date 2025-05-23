@@ -29,7 +29,7 @@ class Tabs(ctk.CTkTabview):
     3. collect variables from each tab instead of returning a lot of variables
     and passing them between functions.
     """
-    def __init__(self, master, **kwargs):
+    def __init__(self, master, welcome_label_widgets=None, **kwargs):
         super().__init__(master, **kwargs)
         self.master = master
         self.config = load_config() # Load config once
@@ -39,7 +39,7 @@ class Tabs(ctk.CTkTabview):
         self.inside_cat_path:str = ""
         self.inner_switch = None
         self.category_instance = None
-        self.label_widgets = {} # Dictionary to store label widgets
+        self.label_widgets = welcome_label_widgets or {}  # Initialize with welcome screen labels
 
         self.tab_widget = ctk.CTkTabview(master)  # create tabs widget
         self.tab_widget.pack(fill="both", expand=True)
@@ -75,9 +75,10 @@ class Tabs(ctk.CTkTabview):
         project_creation_frame = ctk.CTkFrame(tab)  # create a frame for project creation (name, checkboxes, category)
         project_creation_frame.pack(fill="both", expand=True)
 
-        project_name_label = ctk.CTkLabel(project_creation_frame, text=self.config["Labels"]["project_name_label"],
+        project_name_label = ctk.CTkLabel(project_creation_frame, text=self.config["Main Tab Labels"]["project_name_label"],
                                           font=("Arial", 22, "bold"))  # project name label
         project_name_label.pack(pady=15) # creates label
+        self.label_widgets["project_name_label"] = project_name_label  # Store in label_widgets
 
         self.project_name = get_project_name(project_creation_frame) # Project name entry
 
@@ -92,32 +93,53 @@ class Tabs(ctk.CTkTabview):
 
     def open_config_editor(self):
         """
-        Opens a window to edit labels in config.txt and updates the app dynamically.
+        Opens a window to edit labels in config.txt, organized by sections in tabs.
+        Updates the app dynamically after saving changes.
         """
         editor_window = ctk.CTkToplevel()
-        editor_window.title("Edit Labels")
-        editor_window.geometry("600x400")
+        editor_window.title("Label Editor")
+        editor_window.geometry("700x400")  # Slightly wider window to fit tabs
 
         editor_window.transient(root)
         editor_window.grab_set()
         editor_window.focus_force()
 
-        scroll_frame = ctk.CTkScrollableFrame(editor_window, label_text="Edit Labels", label_font=("Arial", 16, "bold"))
-        scroll_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        # Create a tabview for the label sections
+        tab_view = ctk.CTkTabview(editor_window)
+        tab_view.pack(fill="both", expand=True, padx=10, pady=10)
 
-        entries = {}
-        for label_key in self.config["Labels"]:
-            frame = ctk.CTkFrame(scroll_frame)
-            frame.pack(fill="x", pady=5)
-            ctk.CTkLabel(frame, text=label_key, font=("Arial", 14), width=200).pack(side="left", padx=5)
-            entry = ctk.CTkEntry(frame, width=300, font=("Arial", 14))
-            entry.insert(0, self.config["Labels"][label_key])
-            entry.pack(side="left", padx=5)
-            entries[label_key] = entry
+        # Define the sections for labels as per config.txt
+        label_sections = {
+            "Welcome Screen Labels": ["welcome_label", "instruction_label", "instruction_label2"],
+            "Main Tab Labels": ["project_name_label"],
+            "Configure Tab Labels": ["directory_label", "warning_label"],
+            "Modes Tab Labels": ["modes_tab_label", "assign_instruction", "mode_display_label", "invalid_mode_alert"],
+            "Other Labels": ["success_popup_label", "no_category_popup_label"]
+        }
+
+        entries = {}  # Dictionary to store entry widgets with sections
+        for section, labels in label_sections.items():
+            tab_view.add(section)  # Create a tab for each sections
+            scroll_frame = ctk.CTkScrollableFrame(tab_view.tab(section), label_text=f"Edit {section}",
+                                                  label_font=("Arial", 16, "bold"))
+            scroll_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+            for label_key in labels:
+                frame = ctk.CTkFrame(scroll_frame)
+                frame.pack(fill="x", pady=5)
+                ctk.CTkLabel(frame, text=label_key, font=("Arial", 14), width=200).pack(side="left", padx=5)
+                entry = ctk.CTkEntry(frame, width=300, font=("Arial", 14))
+                entry.insert(0, self.config[section].get(label_key, ""))
+                entry.pack(side="left", padx=5)
+                entries[(section, label_key)] = entry
+
+        # Customize tab buttons for better visibility
+        for button in tab_view._segmented_button._buttons_dict.values():
+            button.configure(font=("Arial", 12), width=150, height=40)  # Smaller font, wider and taller button
 
         def save_changes():
-            for key, entry_widget in entries.items():
-                self.config["Labels"][key] = entry_widget.get().strip() or self.config["Labels"][key]
+            for (sections, key), entry_widget in entries.items():
+                self.config[sections][key] = entry_widget.get().strip() or self.config[sections].get(key, "")
             save_config(self.config)
             self.update_labels()
             editor_window.destroy()
@@ -134,22 +156,33 @@ class Tabs(ctk.CTkTabview):
         Updates all labels in the app based on the current config.
         Also refreshes category list and modes display if needed.
         """
-        for key, widget in self.label_widgets.items():
-            if key == "directory_label":
-                widget.configure(text=self.config["Labels"][key].format(path=self.main_folder))
-            else:
-                widget.configure(text=self.config["Labels"][key])
+        label_sections = {
+            "Welcome Screen Labels": ["welcome_label", "instruction_label", "instruction_label2"],
+            "Main Tab Labels": ["project_name_label"],
+            "Configure Tab Labels": ["directory_label", "warning_label"],
+            "Modes Tab Labels": ["modes_tab_label", "assign_instruction", "mode_display_label"]
+        }
 
+        for section, labels in label_sections.items():
+            for key in labels:
+                if key in self.label_widgets:
+                    if key == "directory_label":
+                        self.label_widgets[key].configure(text=self.config[section][key].format(path=self.main_folder))
+                    else:
+                        self.label_widgets[key].configure(text=self.config[section][key])
+
+        # Update modes display if modes_list exists
+        if hasattr(self, 'modes_list') and self.modes_list:
+            display_entries_list = "\n".join(self.modes_list)
+            self.label_widgets["mode_display_label"].configure(
+                text=f"{self.config['Modes Tab Labels']['mode_display_label']}\n{display_entries_list}")
+
+        # Update category list if needed
         self.category_instance.get_categories()
         if self.category_instance.scrl_frame:
             for widget in self.category_instance.scrl_frame.winfo_children():
                 widget.destroy()
             self.category_instance.segmented_buttons()
-
-        if hasattr(self, 'modes_list') and self.modes_list:
-            display_entries_list = "\n".join(self.modes_list)
-            self.label_widgets["mode_display_label"].configure(
-                text=f"{self.config['Labels']['mode_display_label']}\n{display_entries_list}")
 
     def config_tab(self, tab_frame):
         """
@@ -162,14 +195,16 @@ class Tabs(ctk.CTkTabview):
         path_frame = ctk.CTkFrame(tab_frame)  # create a frame for path management
         path_frame.pack(side="top", fill="both", expand=True)
 
-        directory_label = ctk.CTkLabel(path_frame, text=self.config["Labels"]["directory_label"].format(path=self.main_folder),
+        directory_label = ctk.CTkLabel(path_frame, text=self.config["Configure Tab Labels"]["directory_label"].format(path=self.main_folder),
                                        font=("Arial", 16, "bold"))
         directory_label.pack(pady=20) # adds a label that tells us the current main directory
+        self.label_widgets["directory_label"] = directory_label
 
         warning_label = ctk.CTkLabel(path_frame,
-                                     text=self.config["Labels"]["warning_label"],
+                                     text=self.config["Configure Tab Labels"]["warning_label"],
                                      font=("Arial", 16, "bold"), text_color="#ff4249")
         warning_label.pack(pady=20)  # creates label that warns about changing main directory.
+        self.label_widgets["warning_label"] = warning_label
 
         edit_labels_button = ctk.CTkButton(path_frame, width=150, height=50, text="Edit Labels",
                                            font=("Arial", 20, "bold"), command= self.open_config_editor)
@@ -182,7 +217,7 @@ class Tabs(ctk.CTkTabview):
 
         uses the custom class to add a button that
         adds entries and a modes tracker"""
-        mode_logic = AddModeLogic(tab, self.config)
+        mode_logic = AddModeLogic(tab, self.config, self.label_widgets)
         self.modes_list = mode_logic.get_list()
 
         confirm_button = ctk.CTkButton(tab, text="Create",
@@ -290,13 +325,14 @@ class AddModeLogic:
     it creates a button that each time you press it, it adds an entry.
     also, it has an entry counter and a self updating label that indicated the number
     of entries. """
-    def __init__(self, frame, config):
+    def __init__(self, frame, config, label_widgets):
         """creates a counter
         creates a frame
         creates a button
         creates a label"""
         self.frame = frame
         self.config = config
+        self.label_widgets = label_widgets # Store reference to label_widgets
         self.entries_list = []  # # This holds the list of entries
         self.alert_label = None  # Initialize the alert label to make sure only 1 label will show at a time
 
@@ -306,16 +342,19 @@ class AddModeLogic:
         self.modes_frame.pack(side="top", fill="both", expand=True)
 
         # Add a Label
-        self.modes_tab_label = ctk.CTkLabel(self.modes_frame, text=self.config["Labels"]["modes_tab_label"], font=("Arial", 24, "bold"))
+        self.modes_tab_label = ctk.CTkLabel(self.modes_frame, text=self.config["Modes Tab Labels"]["modes_tab_label"], font=("Arial", 24, "bold"))
         self.modes_tab_label.pack(pady=10) # creates label
-        self.assign_instruction = ctk.CTkLabel(self.modes_frame, text=self.config["Labels"]["assign_instruction"], font=("Arial", 16, "bold"))
+        self.label_widgets["modes_tab_label"] = self.modes_tab_label
+        self.assign_instruction = ctk.CTkLabel(self.modes_frame, text=self.config["Modes Tab Labels"]["assign_instruction"], font=("Arial", 16, "bold"))
         self.assign_instruction.pack(pady=5) # creates label
+        self.label_widgets["assign_instruction"] = self.assign_instruction
 
         self.add_entry()
 
         # Label to show the entry count
-        self.mode_display_label = ctk.CTkLabel(self.modes_frame, text=self.config["Labels"]["mode_display_label"], font=("Arial", 16, "bold"))
+        self.mode_display_label = ctk.CTkLabel(self.modes_frame, text=self.config["Modes Tab Labels"]["mode_display_label"], font=("Arial", 16, "bold"))
         self.mode_display_label.pack(pady=5, side="top")
+        self.label_widgets["mode_display_label"] = self.mode_display_label
 
     def add_entry(self):
         """Adds a new entry field with the number of the mode."""
@@ -332,20 +371,20 @@ class AddModeLogic:
         entry_text = event.widget.get()  # Get the text from the widget that triggered the event
         if entry_text not in self.entries_list and entry_text.strip():
             # This validates that there are no duplicates in modes list, and an actual name (not just whitespaces)
-            self.entries_list.append(entry_text) # Appends the Mode to a modes list
+            self.entries_list.append(entry_text)  # Appends the Mode to a modes list
             display_entries_list = "\n".join(self.entries_list)
             self.mode_display_label.configure(
-            text=f"{self.config['Labels']['mode_display_label']}\n{display_entries_list}") # displays the number of modes and the modes list
+                text=f"{self.config['Modes Tab Labels']['mode_display_label']}\n{display_entries_list}")  # displays the number of modes and the modes list
             event.widget.delete(0, ctk.END)  # Clears the entry
-
         else:
             # Creates an alert label in case the name is invalid
             if self.alert_label is None or not self.alert_label.winfo_exists():
                 # Create the alert label only if it doesn't already exist or is not visible
                 self.alert_label = ctk.CTkLabel(self.modes_frame, text_color="red", font=("Arial", 16),
-                                       text=self.config["Labels"]["invalid_mode_alert"])  # Creates an alert label in case the name is invalid
-            self.alert_label.pack()
-            self.modes_frame.after(1000, self.alert_label.pack_forget)
+                                                text=self.config["Modes Tab Labels"][
+                                                    "invalid_mode_alert"])  # Creates an alert label
+                self.alert_label.pack()
+                self.modes_frame.after(1000, self.alert_label.pack_forget)
 
 
     def get_list(self):
@@ -369,7 +408,8 @@ def load_config():
     Creates an empty config if the file is missing or raises an error on parsing issues.
     """
     config_file = "config.txt"
-    config = {"Paths": {}, "Labels": {}}
+    config = {"Paths": {}, "Welcome Screen Labels": {}, "Main Tab Labels": {},
+              "Configure Tab Labels": {}, "Modes Tab Labels": {}, "Other Labels": {}}
 
     if not os.path.exists(config_file):
         print(f"Config file '{config_file}' not found. Creating empty config.")
@@ -396,11 +436,6 @@ def load_config():
     except Exception as e:
         raise Exception(f"Error reading '{config_file}': {e}")
 
-    if "Paths" not in config:
-        config["Paths"] = {}
-    if "Labels" not in config:
-        config["Labels"] = {}
-
     return config
 
 
@@ -420,48 +455,60 @@ def app_initialization():
     root.title("RFeye Site Helper V1.2")  # set app title
     root.geometry("500x550")  # Set the window size
 
-    welcome_screen() # runs first welcome screen
+    welcome_label_widgets = welcome_screen()  # Capture label widgets
+    root.welcome_label_widgets = welcome_label_widgets  # Store temporarily in root
     root.mainloop()  # starts GUI
 
 def welcome_screen():
     """
     Creates a main frame and introduction to the app
     creates 2 buttons to either create a new project or close the app.
+    Returns a dictionary of label widgets for use in Tabs.
     """
     config = load_config()
     welcome_frame = ctk.CTkFrame(root)
     welcome_frame.pack(side="top", fill="both", expand=True)  # create welcome frame
 
-    welcome_label = ctk.CTkLabel(welcome_frame, text=config["Labels"]["welcome_label"], font=("Arial", 24, "bold"))
-    welcome_label.pack(pady=15) # creates label
+    label_widgets = {}  # Local dictionary to store label widgets
 
-    instruction_label = ctk.CTkLabel(welcome_frame, text=config["Labels"]["instruction_label"],
-                                     font=("Arial", 18, "bold"))
+    welcome_label = ctk.CTkLabel(welcome_frame,
+                                text=config["Welcome Screen Labels"].get("welcome_label", "RFeye Site Helper V1.2"),
+                                font=("Arial", 24, "bold"))
+    welcome_label.pack(pady=15)  # creates label
+    label_widgets["welcome_label"] = welcome_label
+
+    instruction_label = ctk.CTkLabel(welcome_frame,
+                                    text=config["Welcome Screen Labels"].get("instruction_label", "Welcome"),
+                                    font=("Arial", 18, "bold"))
     instruction_label.pack(pady=5)  # creates label
+    label_widgets["instruction_label"] = instruction_label
 
-    instruction_label2 = ctk.CTkLabel(welcome_frame, text=config["Labels"]["instruction_label2"],
+    instruction_label2 = ctk.CTkLabel(welcome_frame,
+                                     text=config["Welcome Screen Labels"].get("instruction_label2", "Choose to create a new project"),
                                      font=("Arial", 24, "bold"))
-    instruction_label2.pack(pady=15) # creates label
+    instruction_label2.pack(pady=15)  # creates label
+    label_widgets["instruction_label2"] = instruction_label2
 
     buttons_frame = ctk.CTkFrame(root)  # create buttons frame
     buttons_frame.pack(side="bottom", expand=True, pady=20, anchor="center")
     new_project_button = ctk.CTkButton(buttons_frame, width=200, height=100, text="New Project", font=("Arial", 22, "bold"),
                                        command=on_new_project_window_button,
                                        hover_color='#6796e0', fg_color="#3873d1")
-    new_project_button.pack(side="left", padx=10) # new project button
+    new_project_button.pack(side="left", padx=10)  # new project button
     close_window_button = ctk.CTkButton(buttons_frame, width=200, height=100, text="Close Window", font=("Arial", 22, "bold"),
-                                        command=lambda :root.destroy(),
+                                        command=lambda: root.destroy(),
                                         hover_color='#6796e0', fg_color="#3873d1")
-    close_window_button.pack(side="right", padx=10) # close app button
+    close_window_button.pack(side="right", padx=10)  # close app button
+
+    return label_widgets
 
 def on_new_project_window_button():
     """Runs in the event of pressing the New Project button.
     Removes all Frames from root,
     runs the Tabs class logic.
-    See class Tabs for more documentation.
     """
     forget_all_frames()  # forget current frames
-    Tabs(master=root) # runs Class Tabs Logic
+    Tabs(master=root, welcome_label_widgets=root.welcome_label_widgets)  # type: ignore  # Pass welcome_label_widgets
 
 def forget_all_frames():
     """Removes all frames, widgets, and scrollableFrames from root"""
@@ -509,7 +556,7 @@ def choose_directory(current_path, directory_label, tabs_instance):
     if selected_directory != current_path and selected_directory:
         tabs_instance.main_folder = selected_directory
         save_default_path(selected_directory)
-        directory_label.configure(text=tabs_instance.config["Labels"]["directory_label"].format(path=selected_directory))
+        directory_label.configure(text=tabs_instance.config["Configure Tab Labels"]["directory_label"].format(path=selected_directory))
 
 def change_directory_popup(current_path, directory_label, tabs_instance):
     """Opens a Popup to confirm main directory change."""
@@ -538,7 +585,7 @@ def show_project_creation_popup(new_project_path):
     popup = ctk.CTkToplevel()
     popup.geometry("300x150")
     popup.title("Success!")
-    label = ctk.CTkLabel(popup, text=load_config()["Labels"]["success_popup_label"], font=("Arial", 16, "bold"))
+    label = ctk.CTkLabel(popup, text=load_config()["Other Labels"]["success_popup_label"], font=("Arial", 16, "bold"))
     label.pack(pady=20)
 
     close_button = ctk.CTkButton(popup, text="Open Folder",font=("Arial", 16, "bold"), command=lambda: os.startfile(new_project_path))
@@ -555,7 +602,7 @@ def no_category_popup(tab):
     popup = ctk.CTkToplevel()
     popup.title("Are you Sure?")
     label = ctk.CTkLabel(popup,
-                         text=load_config()["Labels"]["no_category_popup_label"],
+                         text=load_config()["Other Labels"]["no_category_popup_label"],
                          font=("Arial", 16, "bold"))
     label.pack(pady=10)
 

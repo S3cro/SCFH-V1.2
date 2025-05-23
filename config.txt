@@ -1,19 +1,24 @@
 [Paths]
 main_directory=C:/Users/Secro/PycharmProjects/test folder
 
-[Labels]
+[Welcome Screen Labels]
+welcome_label=RFeye Site Helper V1.2
+instruction_label=Welcome
+instruction_label2=Choose to create a new project
+
+[Main Tab Labels]
 project_name_label=Enter Project Name:
+
+[Configure Tab Labels]
 directory_label=Current Folder:\n{path}\n\nClick to change Folder:
-{path}
-Click to change Folder:
 warning_label=Warning,\nDo NOT change Directory\n unless the Iron Swords Directory has been changed!
+
+[Modes Tab Labels]
 modes_tab_label=Enter Constellations.
 assign_instruction=Press Enter to Append a Mode.
 mode_display_label=Modes will be displayed here.
 invalid_mode_alert=Please enter a valid Name.
-welcome_label=RFeye Site Helper V1.2
-instruction_label=Welcome
-instruction_label2=Choose to create a new project
-no_category_popup_label=No Category has been chosen.
-success_popup_label=Folder has been Created!
 
+[Other Labels]
+success_popup_label=Folder has been Created!
+no_category_popup_label=No Category has been chosen.
