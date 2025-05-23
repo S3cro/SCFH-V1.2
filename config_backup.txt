@@ -1,0 +1,27 @@
+[Paths]
+C:/Users/Secro/PycharmProjects/test folder
+[Labels]
+project_name_label=Enter Project Name:
+\n
+directory_label=Current Folder:\n{path}\nClick to change Folder:
+\n
+warning_label=Warning, \nDo NOT change Directory \nunless the Iron Swords Directory has been changed!
+\n
+modes_tab_label=Enter Constellations.
+\n
+assign_instruction=Press Enter to Append a Mode.
+\n
+mode_display_label=Modes will be displayed here.
+\n
+invalid_mode_alert=Please enter a valid Name.
+\n
+welcome_label=RFeye Site Helper V1.2
+\n
+instruction_label=Welcome\n✡ Am Israel Chai ✡\nby Matan
+\n
+instruction_label2=Choose to create a new project\nor close this window:
+\n
+no_category_popup_label=No Category has been chosen.\nChoose a Category or\nSave in Uncategorized for now?
+\n
+success_popup_label=Folder has been Created!\nGood Luck!
+\n

@@ -1,5 +1,7 @@
 from tkinter import filedialog
 import customtkinter as ctk
+from pyperclip import copy
+from PIL import Image, ImageTk
 import os
 import time
 
@@ -263,7 +265,7 @@ class Tabs(ctk.CTkTabview):
             for mode in self.modes_list:
                 mode_folder_path = os.path.join(project_path, mode)
                 os.makedirs(mode_folder_path, exist_ok=True)
-        show_project_creation_popup(project_path)
+        show_project_creation_popup(project_path, self.modes_list)
 
 
 class CategoriesLogic:
@@ -453,7 +455,8 @@ def app_initialization():
     """This is where it all begins..."""
     ctk.set_appearance_mode("dark")  # dark mode
     root.title("RFeye Site Helper V1.2")  # set app title
-    root.geometry("500x550")  # Set the window size
+    root.geometry("550x550")  # Set the window size
+    root.resizable(False, False)  # Prevent resizing in both directions
 
     welcome_label_widgets = welcome_screen()  # Capture label widgets
     root.welcome_label_widgets = welcome_label_widgets  # Store temporarily in root
@@ -461,44 +464,57 @@ def app_initialization():
 
 def welcome_screen():
     """
-    Creates a main frame and introduction to the app
-    creates 2 buttons to either create a new project or close the app.
+    Creates a main frame and introduction to the app with a fixed background image.
+    Creates 2 smaller buttons in a fully transparent frame to show the background image.
     Returns a dictionary of label widgets for use in Tabs.
     """
     config = load_config()
     welcome_frame = ctk.CTkFrame(root)
-    welcome_frame.pack(side="top", fill="both", expand=True)  # create welcome frame
+    welcome_frame.pack(side="top", fill="both", expand=True)  # Create welcome frame
+
+    # Load and set background image
+    try:
+        bg_image = Image.open("images/SCFH BG V2.png")  # Replace with your image file name
+        bg_image = bg_image.resize((550, 550), Image.Resampling.LANCZOS)  # Match window size
+        bg_ctk_image = ctk.CTkImage(bg_image, size=(550, 550))
+        bg_label = ctk.CTkLabel(welcome_frame, image=bg_ctk_image, text="")
+        bg_label.image = bg_ctk_image  # Keep a reference to avoid garbage collection
+        bg_label.place(relx=0, rely=0, relwidth=1, relheight=1)  # Cover entire frame
+    except FileNotFoundError:
+        print("Background image 'images/SCFH BG V2.png' not found. Using default background.")
+        welcome_frame.configure(fg_color="#2B2B2B")  # Fallback to solid color if image is missing
 
     label_widgets = {}  # Local dictionary to store label widgets
 
     welcome_label = ctk.CTkLabel(welcome_frame,
-                                text=config["Welcome Screen Labels"].get("welcome_label", "RFeye Site Helper V1.2"),
-                                font=("Arial", 24, "bold"))
-    welcome_label.pack(pady=15)  # creates label
+                                 text=config["Welcome Screen Labels"].get("welcome_label", "RFeye Site Helper V1.2"),
+                                 font=("Arial", 24, "bold"), text_color="white")
+    welcome_label.pack(pady=15)  # Creates label
     label_widgets["welcome_label"] = welcome_label
 
     instruction_label = ctk.CTkLabel(welcome_frame,
                                     text=config["Welcome Screen Labels"].get("instruction_label", "Welcome"),
-                                    font=("Arial", 18, "bold"))
-    instruction_label.pack(pady=5)  # creates label
+                                    font=("Arial", 18, "bold"), text_color="white")
+    instruction_label.pack(pady=5)  # Creates label
     label_widgets["instruction_label"] = instruction_label
 
     instruction_label2 = ctk.CTkLabel(welcome_frame,
-                                     text=config["Welcome Screen Labels"].get("instruction_label2", "Choose to create a new project"),
-                                     font=("Arial", 24, "bold"))
-    instruction_label2.pack(pady=15)  # creates label
+                                      text=config["Welcome Screen Labels"].get("instruction_label2", "Choose to create a new project"),
+                                      font=("Arial", 24, "bold"), text_color="white")
+    instruction_label2.pack(pady=15)  # Creates label
     label_widgets["instruction_label2"] = instruction_label2
 
-    buttons_frame = ctk.CTkFrame(root)  # create buttons frame
+    buttons_frame = ctk.CTkFrame(welcome_frame, fg_color="transparent", bg_color="transparent")  # Fully transparent
     buttons_frame.pack(side="bottom", expand=True, pady=20, anchor="center")
-    new_project_button = ctk.CTkButton(buttons_frame, width=200, height=100, text="New Project", font=("Arial", 22, "bold"),
+
+    new_project_button = ctk.CTkButton(buttons_frame, width=150, height=60, text="New Project", font=("Arial", 18, "bold"),
                                        command=on_new_project_window_button,
                                        hover_color='#6796e0', fg_color="#3873d1")
-    new_project_button.pack(side="left", padx=10)  # new project button
-    close_window_button = ctk.CTkButton(buttons_frame, width=200, height=100, text="Close Window", font=("Arial", 22, "bold"),
+    new_project_button.pack(side="left", padx=10)  # New project button
+    close_window_button = ctk.CTkButton(buttons_frame, width=150, height=60, text="Close Window", font=("Arial", 18, "bold"),
                                         command=lambda: root.destroy(),
                                         hover_color='#6796e0', fg_color="#3873d1")
-    close_window_button.pack(side="right", padx=10)  # close app button
+    close_window_button.pack(side="right", padx=10)  # Close app button
 
     return label_widgets
 
@@ -578,23 +594,63 @@ def change_directory_popup(current_path, directory_label, tabs_instance):
     warning_popup.grab_set()
     warning_popup.focus_force()
 
-def show_project_creation_popup(new_project_path):
-    """creates a popup window upon project creation.
-    adds a button to close popup and app,
-    and button to open containing folder."""
-    popup = ctk.CTkToplevel()
-    popup.geometry("300x150")
-    popup.title("Success!")
-    label = ctk.CTkLabel(popup, text=load_config()["Other Labels"]["success_popup_label"], font=("Arial", 16, "bold"))
-    label.pack(pady=20)
 
-    close_button = ctk.CTkButton(popup, text="Open Folder",font=("Arial", 16, "bold"), command=lambda: os.startfile(new_project_path))
-    close_button.pack(side="left", pady=10, padx=10)
-    close_button = ctk.CTkButton(popup, text="Close App",font=("Arial", 16, "bold"), command=lambda: root.destroy())
-    close_button.pack(side="right", pady=10, padx=10)
+def show_project_creation_popup(new_project_path, modes_list):
+    """Creates a popup window upon project creation with scrollable modes and fixed buttons.
+    Minimizes the main GUI window when the popup appears and restores it when the popup closes."""
+    popup = ctk.CTkToplevel()
+    popup.geometry("400x500")  # Increased height to accommodate scrolling
+    popup.title("Success!")
+
+    # Minimize the main GUI window
+    root.iconify()
+
+    # Restore main window when popup is closed
+    popup.protocol("WM_DELETE_WINDOW", lambda: (root.deiconify(), popup.destroy()))
+
+    # Success label at the top
+    label = ctk.CTkLabel(popup, text=load_config()["Other Labels"]["success_popup_label"], font=("Arial", 16, "bold"))
+    label.pack(pady=10)
+
+    # Scrollable frame for modes and their copy buttons
+    scrollable_modes_frame = ctk.CTkScrollableFrame(popup, label_text="Constellations",
+                                                    label_font=("Arial", 14, "bold"))
+    scrollable_modes_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+    if modes_list:
+        for mode in modes_list:
+            mode_frame = ctk.CTkFrame(scrollable_modes_frame)
+            mode_frame.pack(fill="x", pady=5, padx=5)
+
+            mode_label = ctk.CTkLabel(mode_frame, text=mode, font=("Arial", 14))
+            mode_label.pack(side="left", padx=10)
+
+            def copy_mode(mode=mode):
+                copy(mode)
+                mode_label.configure(text=f"{mode} (Copied!)", text_color="green")
+                popup.after(2000, lambda: mode_label.configure(text=mode, text_color="white"))
+
+            copy_button = ctk.CTkButton(mode_frame, text="Copy", font=("Arial", 12, "bold"), width=80, height=25,
+                                        command=copy_mode)
+            copy_button.pack(side="right", padx=10)
+    else:
+        no_modes_label = ctk.CTkLabel(scrollable_modes_frame, text="No constellations added.", font=("Arial", 14))
+        no_modes_label.pack(pady=10)
+
+    # Frame for buttons, pinned to the bottom
+    buttons_frame = ctk.CTkFrame(popup)
+    buttons_frame.pack(side="bottom", fill="x", pady=10, padx=10)
+
+    open_button = ctk.CTkButton(buttons_frame, text="Open Folder", font=("Arial", 16, "bold"),
+                                command=lambda: os.startfile(new_project_path))
+    open_button.pack(side="left", padx=10)
+
+    close_button = ctk.CTkButton(buttons_frame, text="Close App", font=("Arial", 16, "bold"),
+                                 command=lambda: (root.deiconify(), root.destroy()))
+    close_button.pack(side="right", padx=10)
+
     # Make the popup modal
     popup.transient(root)
-    # Set focus to the popup window
     popup.focus_force()
 
 def no_category_popup(tab):
